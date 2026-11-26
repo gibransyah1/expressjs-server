@@ -51,21 +51,23 @@ pipeline {
             }
         }
 
-        stage('Deploy') {
-            steps {
-                echo 'Melakukan deployment aplikasi'
+        
+stage('Deploy') {
+    steps {
+        echo 'Melakukan deployment aplikasi'
 
-                sh '''
-                    docker rm -f crud-rest-api || true
+        sh '''
+            docker rm -f crud-rest-api || true
 
-                    docker run -d \
-                      --name crud-rest-api \
-                      --restart unless-stopped \
-                      -p 8080:8080 \
-                      crud-rest-api:latest
-                '''
-            }
-        }
+            docker run -d \
+              --name crud-rest-api \
+              --restart unless-stopped \
+              -p 8081:8080 \
+              crud-rest-api:latest
+        '''
+    }
+}
+
     }
 
     post {
