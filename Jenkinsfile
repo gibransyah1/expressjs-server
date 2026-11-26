@@ -2,6 +2,10 @@
 pipeline {
     agent any
 
+    options {
+        skipDefaultCheckout(true)
+    }
+
     environment {
         APP_NAME = "crud-rest-api"
         APP_PORT = "8080"
@@ -11,51 +15,46 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                echo 'Mengambil source code'
+                echo 'Mengambil source code dari GitHub'
                 checkout scm
             }
         }
 
         stage('Check Node.js') {
             steps {
+                echo 'Memeriksa Node.js dan npm'
                 sh '''
-                    docker run --rm node:22-alpine node --version
-                    docker run --rm node:22-alpine npm --version
+                    node --version
+                    npm --version
                 '''
             }
         }
 
         stage('Install Dependencies') {
             steps {
-                sh '''
-                    docker run --rm \
-                      -v "$WORKSPACE:/app" \
-                      -w /app \
-                      node:22-alpine npm ci
-                '''
+                echo 'Menginstall dependencies'
+                sh 'npm ci'
             }
         }
 
         stage('Run Tests') {
             steps {
-                sh '''
-                    docker run --rm \
-                      -v "$WORKSPACE:/app" \
-                      -w /app \
-                      node:22-alpine \
-                      node --check app.js
-                '''
+                echo 'Memeriksa sintaks aplikasi'
+                sh 'node --check app.js'
             }
         }
 
         stage('Build Docker Image') {
             steps {
+                echo 'Membangun Docker image'
                 sh 'docker build -t crud-rest-api:latest .'
             }
         }
 
         stage('Deploy') {
             steps {
+                echo 'Melakukan deployment aplikasi'
+
                 sh '''
                     docker rm -f crud-rest-api || true
 
