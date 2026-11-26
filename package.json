@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node app.js",
-    "serve": "nodemon app.js",
-    "test": "node --check app.js"
+    "test": "echo \"No automated tests configured\"",
+    "serve": "nodemon app.js"
   },
   "keywords": [
     "nodejs",

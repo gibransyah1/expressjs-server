@@ -52,21 +52,90 @@ pipeline {
         }
 
         
+
 stage('Deploy') {
     steps {
-        echo 'Melakukan deployment aplikasi'
+        echo 'Menyiapkan database dan deployment aplikasi'
 
-        sh '''
-            docker rm -f crud-rest-api || true
+        withCredentials([
+            string(
+                credentialsId: 'mysql-root-password',
+                variable: 'DB_ROOT_PASSWORD'
+            )
+        ]) {
+            sh '''
+                set +x
 
-            docker run -d \
-              --name crud-rest-api \
-              --restart unless-stopped \
-              -p 8081:8080 \
-              crud-rest-api:latest
-        '''
+                # Membuat Docker network
+                docker network inspect crud-network >/dev/null 2>&1 || \
+                    docker network create crud-network
+
+                # Membuat volume database permanen
+                docker volume create crud_mysql_data
+
+                # Menghapus container aplikasi dan database lama
+                docker rm -f crud-rest-api || true
+                docker rm -f crud-mysql || true
+
+                # Menjalankan MariaDB
+                docker run -d \
+                    --name crud-mysql \
+                    --network crud-network \
+                    --restart unless-stopped \
+                    -e MARIADB_ROOT_PASSWORD="$DB_ROOT_PASSWORD" \
+                    -e MARIADB_DATABASE=belajar \
+                    -v crud_mysql_data:/var/lib/mysql \
+                    mariadb:11.4
+
+                # Menunggu database siap
+                for i in $(seq 1 60); do
+                    if docker exec crud-mysql \
+                        mariadb-admin ping -h 127.0.0.1 \
+                        -uroot -p"$DB_ROOT_PASSWORD" \
+                        --silent >/dev/null 2>&1; then
+                        echo "Database siap!"
+                        break
+                    fi
+
+                    if [ "$i" -eq 60 ]; then
+                        echo "Database gagal dijalankan"
+                        docker logs crud-mysql
+                        exit 1
+                    fi
+
+                    sleep 2
+                done
+
+                # Membuat tabel mahasiswa
+                docker exec crud-mysql \
+                    mariadb -uroot -p"$DB_ROOT_PASSWORD" belajar \
+                    -e "CREATE TABLE IF NOT EXISTS mahasiswa (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        nim VARCHAR(30) NOT NULL,
+                        nama VARCHAR(100) NOT NULL,
+                        email VARCHAR(150),
+                        alamat TEXT
+                    );"
+
+                # Menjalankan aplikasi Express
+                docker run -d \
+                    --name crud-rest-api \
+                    --network crud-network \
+                    --restart unless-stopped \
+                    -e DB_HOST=crud-mysql \
+                    -e DB_PORT=3306 \
+                    -e DB_USER=root \
+                    -e DB_PASSWORD="$DB_ROOT_PASSWORD" \
+                    -e DB_NAME=belajar \
+                    -p 8081:8080 \
+                    crud-rest-api:latest
+
+                echo "Deployment selesai!"
+            '''
+        }
     }
 }
+
 
     }
 
