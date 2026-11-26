@@ -1,9 +1,10 @@
+
 pipeline {
     agent any
 
     environment {
         APP_NAME = "crud-rest-api"
-        APP_PORT = "3000"
+        APP_PORT = "8080"
     }
 
     stages {
@@ -15,15 +16,35 @@ pipeline {
             }
         }
 
+        stage('Check Node.js') {
+            steps {
+                sh '''
+                    docker run --rm node:22-alpine node --version
+                    docker run --rm node:22-alpine npm --version
+                '''
+            }
+        }
+
         stage('Install Dependencies') {
             steps {
-                sh 'npm ci'
+                sh '''
+                    docker run --rm \
+                      -v "$WORKSPACE:/app" \
+                      -w /app \
+                      node:22-alpine npm ci
+                '''
             }
         }
 
         stage('Run Tests') {
             steps {
-                sh 'npm test'
+                sh '''
+                    docker run --rm \
+                      -v "$WORKSPACE:/app" \
+                      -w /app \
+                      node:22-alpine \
+                      node --check app.js
+                '''
             }
         }
 
@@ -41,12 +62,11 @@ pipeline {
                     docker run -d \
                       --name crud-rest-api \
                       --restart unless-stopped \
-                      -p 3000:3000 \
+                      -p 8080:8080 \
                       crud-rest-api:latest
                 '''
             }
         }
-
     }
 
     post {
