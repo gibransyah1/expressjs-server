@@ -9,6 +9,8 @@ pipeline {
     environment {
         APP_NAME = "crud-rest-api"
         APP_PORT = "8080"
+        GITHUB_REPO = "https://github.com/gibransyah1/expressjs-server"
+        GITHUB_STATUS_CONTEXT = "ci/jenkins"
     }
 
     stages {
@@ -51,92 +53,99 @@ pipeline {
             }
         }
 
-        
+        stage('Deploy') {
+            when {
+                expression {
+                    def currentBranch =
+                        (env.BRANCH_NAME ?: env.GIT_BRANCH ?: '')
+                            .tokenize('/')
+                            .last()
 
-stage('Deploy') {
-    steps {
-        echo 'Menyiapkan database dan deployment aplikasi'
+                    return currentBranch == 'main'
+                }
+            }
 
-        withCredentials([
-            string(
-                credentialsId: 'mysql-root-password',
-                variable: 'DB_ROOT_PASSWORD'
-            )
-        ]) {
-            sh '''
-                set +x
+            steps {
+                echo 'Menyiapkan database dan deployment aplikasi'
 
-                # Membuat Docker network
-                docker network inspect crud-network >/dev/null 2>&1 || \
-                    docker network create crud-network
+                withCredentials([
+                    string(
+                        credentialsId: 'mysql-root-password',
+                        variable: 'DB_ROOT_PASSWORD'
+                    )
+                ]) {
+                    sh '''
+                        set +x
 
-                # Membuat volume database permanen
-                docker volume create crud_mysql_data
+                        # Membuat Docker network
+                        docker network inspect crud-network >/dev/null 2>&1 || \
+                            docker network create crud-network
 
-                # Menghapus container aplikasi dan database lama
-                docker rm -f crud-rest-api || true
-                docker rm -f crud-mysql || true
+                        # Membuat volume database permanen
+                        docker volume create crud_mysql_data
 
-                # Menjalankan MariaDB
-                docker run -d \
-                    --name crud-mysql \
-                    --network crud-network \
-                    --restart unless-stopped \
-                    -e MARIADB_ROOT_PASSWORD="$DB_ROOT_PASSWORD" \
-                    -e MARIADB_DATABASE=belajar \
-                    -v crud_mysql_data:/var/lib/mysql \
-                    mariadb:11.4
+                        # Menghapus container lama
+                        docker rm -f crud-rest-api || true
+                        docker rm -f crud-mysql || true
 
-                # Menunggu database siap
-                for i in $(seq 1 60); do
-                    if docker exec crud-mysql \
-                        mariadb-admin ping -h 127.0.0.1 \
-                        -uroot -p"$DB_ROOT_PASSWORD" \
-                        --silent >/dev/null 2>&1; then
-                        echo "Database siap!"
-                        break
-                    fi
+                        # Menjalankan MariaDB
+                        docker run -d \
+                            --name crud-mysql \
+                            --network crud-network \
+                            --restart unless-stopped \
+                            -e MARIADB_ROOT_PASSWORD="$DB_ROOT_PASSWORD" \
+                            -e MARIADB_DATABASE=belajar \
+                            -v crud_mysql_data:/var/lib/mysql \
+                            mariadb:11.4
 
-                    if [ "$i" -eq 60 ]; then
-                        echo "Database gagal dijalankan"
-                        docker logs crud-mysql
-                        exit 1
-                    fi
+                        # Menunggu database siap
+                        for i in $(seq 1 60); do
+                            if docker exec crud-mysql \
+                                mariadb-admin ping -h 127.0.0.1 \
+                                -uroot -p"$DB_ROOT_PASSWORD" \
+                                --silent >/dev/null 2>&1; then
+                                echo "Database siap!"
+                                break
+                            fi
 
-                    sleep 2
-                done
+                            if [ "$i" -eq 60 ]; then
+                                echo "Database gagal dijalankan"
+                                docker logs crud-mysql
+                                exit 1
+                            fi
 
-                # Membuat tabel mahasiswa
-                docker exec crud-mysql \
-                    mariadb -uroot -p"$DB_ROOT_PASSWORD" belajar \
-                    -e "CREATE TABLE IF NOT EXISTS mahasiswa (
-                        id INT AUTO_INCREMENT PRIMARY KEY,
-                        nim VARCHAR(30) NOT NULL,
-                        nama VARCHAR(100) NOT NULL,
-                        email VARCHAR(150),
-                        alamat TEXT
-                    );"
+                            sleep 2
+                        done
 
-                # Menjalankan aplikasi Express
-                docker run -d \
-                    --name crud-rest-api \
-                    --network crud-network \
-                    --restart unless-stopped \
-                    -e DB_HOST=crud-mysql \
-                    -e DB_PORT=3306 \
-                    -e DB_USER=root \
-                    -e DB_PASSWORD="$DB_ROOT_PASSWORD" \
-                    -e DB_NAME=belajar \
-                    -p 8081:8080 \
-                    crud-rest-api:latest
+                        # Membuat tabel mahasiswa
+                        docker exec crud-mysql \
+                            mariadb -uroot -p"$DB_ROOT_PASSWORD" belajar \
+                            -e "CREATE TABLE IF NOT EXISTS mahasiswa (
+                                id INT AUTO_INCREMENT PRIMARY KEY,
+                                nim VARCHAR(30) NOT NULL,
+                                nama VARCHAR(100) NOT NULL,
+                                email VARCHAR(150),
+                                alamat TEXT
+                            );"
 
-                echo "Deployment selesai!"
-            '''
+                        # Menjalankan aplikasi Express
+                        docker run -d \
+                            --name crud-rest-api \
+                            --network crud-network \
+                            --restart unless-stopped \
+                            -e DB_HOST=crud-mysql \
+                            -e DB_PORT=3306 \
+                            -e DB_USER=root \
+                            -e DB_PASSWORD="$DB_ROOT_PASSWORD" \
+                            -e DB_NAME=belajar \
+                            -p 8081:8080 \
+                            crud-rest-api:latest
+
+                        echo "Deployment selesai!"
+                    '''
+                }
+            }
         }
-    }
-}
-
-
     }
 
     post {
@@ -146,6 +155,66 @@ stage('Deploy') {
 
         failure {
             echo 'CI/CD GAGAL!'
+        }
+
+        always {
+            script {
+                try {
+                    def commitSha = sh(
+                        script: 'git rev-parse HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    def resultState =
+                        currentBuild.currentResult == 'SUCCESS'
+                            ? 'SUCCESS'
+                            : 'FAILURE'
+
+                    def resultMessage =
+                        currentBuild.currentResult == 'SUCCESS'
+                            ? 'Jenkins pipeline berhasil'
+                            : 'Jenkins pipeline gagal'
+
+                    step([
+                        $class: 'GitHubCommitStatusSetter',
+
+                        reposSource: [
+                            $class: 'ManuallyEnteredRepositorySource',
+                            url: env.GITHUB_REPO
+                        ],
+
+                        commitShaSource: [
+                            $class: 'ManuallyEnteredShaSource',
+                            sha: commitSha
+                        ],
+
+                        contextSource: [
+                            $class: 'ManuallyEnteredCommitContextSource',
+                            context: env.GITHUB_STATUS_CONTEXT
+                        ],
+
+                        errorHandlers: [
+                            [$class: 'ShallowAnyErrorHandler']
+                        ],
+
+                        statusResultSource: [
+                            $class: 'ConditionalStatusResultSource',
+                            results: [
+                                [
+                                    $class: 'AnyBuildResult',
+                                    message: resultMessage,
+                                    state: resultState
+                                ]
+                            ]
+                        ]
+                    ])
+
+                    echo "Status GitHub berhasil dikirim: ${resultState}"
+
+                } catch (err) {
+                    echo "Gagal mengirim status ke GitHub: ${err}"
+                }
+            }
         }
     }
 }
