@@ -55,15 +55,15 @@ pipeline {
 
         stage('Deploy') {
             when {
-                expression {
-                    def currentBranch = sh(
-                        script: 'git branch --show-current',
-                        returnStdout: true
-                    ).trim()
-
-                    return currentBranch == 'main'
-                }
-            }
+        expression {
+            return sh(
+                script: '''
+                    git fetch origin main
+                    test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+                ''',
+                returnStatus: true
+            ) == 0
+        }
 
             steps {
                 echo 'Menyiapkan database dan deployment aplikasi'
@@ -148,14 +148,16 @@ pipeline {
         }
 
 
+
 stage('Checkout API Automation') {
     steps {
         dir('api-automation') {
-            git branch: '*/main',
+            git branch: 'main',
                 url: 'https://github.com/gibransyah1/java-api-automation.git'
         }
     }
 }
+
 
 stage('Run API Automation') {
     steps {
