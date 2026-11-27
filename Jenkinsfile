@@ -56,14 +56,13 @@ pipeline {
         stage('Deploy') {
             when {
                 expression {
-                    def currentBranch =
-                        (env.BRANCH_NAME ?: env.GIT_BRANCH ?: '')
-                            .tokenize('/')
-                            .last()
+                    def currentBranch = sh(
+                        script: 'git branch --show-current',
+                        returnStdout: true
+                    ).trim()
 
                     return currentBranch == 'main'
                 }
-            }
 
             steps {
                 echo 'Menyiapkan database dan deployment aplikasi'
