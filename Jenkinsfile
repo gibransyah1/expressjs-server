@@ -63,6 +63,7 @@ pipeline {
 
                     return currentBranch == 'main'
                 }
+            }
 
             steps {
                 echo 'Menyiapkan database dan deployment aplikasi'
