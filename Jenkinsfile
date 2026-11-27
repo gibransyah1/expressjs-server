@@ -64,6 +64,7 @@ pipeline {
                 returnStatus: true
             ) == 0
         }
+    }
 
             steps {
                 echo 'Menyiapkan database dan deployment aplikasi'
