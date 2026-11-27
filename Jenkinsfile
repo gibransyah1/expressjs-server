@@ -55,15 +55,16 @@ pipeline {
 
         stage('Deploy') {
             when {
-                expression {
-                    def currentBranch = sh(
-                        script: 'git branch --show-current',
-                        returnStdout: true
-                    ).trim()
-
-                    return currentBranch == 'main'
-                }
-            }
+        expression {
+            return sh(
+                script: '''
+                    git fetch origin main
+                    test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+                ''',
+                returnStatus: true
+            ) == 0
+        }
+    }
 
             steps {
                 echo 'Menyiapkan database dan deployment aplikasi'
@@ -146,6 +147,35 @@ pipeline {
                 }
             }
         }
+
+
+
+stage('Checkout API Automation') {
+    steps {
+        dir('api-automation') {
+            git branch: 'main',
+                url: 'https://github.com/gibransyah1/java-api-automation.git'
+        }
+    }
+}
+
+
+stage('Run API Automation') {
+    steps {
+        echo 'Menjalankan Java REST Assured Automation...'
+
+        sh '''
+            docker run --rm \
+                --network crud-network \
+                -v jenkins-lab_jenkins_home:/var/jenkins_home \
+                -w "$WORKSPACE/api-automation" \
+                maven:3.9-eclipse-temurin-17 \
+                mvn -B clean test \
+                -DbaseUrl=http://crud-rest-api:8080
+        '''
+    }
+}
+
     }
 
     post {
