@@ -146,6 +146,33 @@ pipeline {
                 }
             }
         }
+
+
+stage('Checkout API Automation') {
+    steps {
+        dir('api-automation') {
+            git branch: '*/main',
+                url: 'https://github.com/gibransyah1/java-api-automation.git'
+        }
+    }
+}
+
+stage('Run API Automation') {
+    steps {
+        echo 'Menjalankan Java REST Assured Automation...'
+
+        sh '''
+            docker run --rm \
+                --network crud-network \
+                -v jenkins-lab_jenkins_home:/var/jenkins_home \
+                -w "$WORKSPACE/api-automation" \
+                maven:3.9-eclipse-temurin-17 \
+                mvn -B clean test \
+                -DbaseUrl=http://crud-rest-api:8080
+        '''
+    }
+}
+
     }
 
     post {
