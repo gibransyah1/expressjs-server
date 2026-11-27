@@ -11,6 +11,3 @@ app.use("/", appRoute);
 app.listen(8080, () => {
   console.log("Server berjalan di port : 8080");
 });
-
-const test = ;
-const test = ;
